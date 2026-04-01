@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { startTransition, useMemo, useState } from "react";
@@ -64,7 +63,10 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
             >
               <Pin className="h-4 w-4" />
             </button>
-            <Link className="font-semibold underline decoration-border underline-offset-4" href={`/states/${row.original.jurisdiction.slug}`}>
+            <Link
+              className="font-semibold underline decoration-border underline-offset-4"
+              href={`/states/${row.original.jurisdiction.slug}`}
+            >
               {row.original.jurisdiction.name}
             </Link>
           </div>
@@ -150,14 +152,35 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-6">
+      <Card className="space-y-4">
+        <div className="space-y-3">
+          <Badge>Rankings</Badge>
+          <CardTitle className="text-3xl">Compare every state on one metric at a time.</CardTitle>
+          <CardDescription className="max-w-2xl text-base">
+            Raw values lead. Ranks and map shading are there to help people scan, not to hide the underlying metric.
+          </CardDescription>
+        </div>
+      </Card>
+
+      <Card className="sticky top-24 z-30 space-y-4 border-primary/15 bg-white/95 shadow-[0_18px_48px_rgba(18,45,55,0.10)] backdrop-blur">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
-            <Badge>Rankings</Badge>
-            <CardTitle className="text-3xl">Compare every state on one metric at a time.</CardTitle>
-            <CardDescription className="max-w-2xl text-base">
-              Raw values lead. Ranks and map shading are there to help people scan, not to hide the underlying metric.
-            </CardDescription>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{metric.category}</Badge>
+              <Badge className="bg-white text-foreground ring-1 ring-border">Current metric</Badge>
+              <Badge className="bg-white text-foreground ring-1 ring-border">
+                {metric.cadence.toLowerCase()}
+              </Badge>
+              <Badge className="bg-white text-foreground ring-1 ring-border">
+                {metric.betterDirection === "HIGHER" ? "Higher is better" : "Lower is better"}
+              </Badge>
+            </div>
+            <div className="space-y-1">
+              <div className="text-lg font-semibold">{metric.label}</div>
+              <div className="text-sm text-muted-foreground">
+                Filters stay pinned while you scan the ranking table.
+              </div>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
@@ -185,31 +208,35 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
             </label>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-2xl bg-muted/60 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Period</div>
-            <div className="mt-2 font-semibold">{rows[0]?.periodLabel ?? "Waiting for ingest"}</div>
-          </div>
-          <div className="rounded-2xl bg-muted/60 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Release date</div>
-            <div className="mt-2 font-semibold">{formatDateLabel(rows[0]?.releaseDate)}</div>
-          </div>
-          <div className="rounded-2xl bg-muted/60 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Direction</div>
-            <div className="mt-2 font-semibold">
-              {metric.betterDirection === "HIGHER" ? "Higher is better" : "Lower is better"}
-            </div>
-          </div>
-          <div className="rounded-2xl bg-muted/60 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coverage</div>
-            <div className="mt-2 font-semibold">{hasRows ? `${rows.length} jurisdictions` : "No data yet"}</div>
-          </div>
-        </div>
         {!hasRows ? (
           <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             This metric has no observations loaded yet. The ranking table stays available so you can switch metrics without losing your place.
           </div>
         ) : null}
+      </Card>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-2xl bg-muted/60 p-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Period</div>
+          <div className="mt-2 font-semibold">{rows[0]?.periodLabel ?? "Waiting for ingest"}</div>
+        </div>
+        <div className="rounded-2xl bg-muted/60 p-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Release date</div>
+          <div className="mt-2 font-semibold">{formatDateLabel(rows[0]?.releaseDate)}</div>
+        </div>
+        <div className="rounded-2xl bg-muted/60 p-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Direction</div>
+          <div className="mt-2 font-semibold">
+            {metric.betterDirection === "HIGHER" ? "Higher is better" : "Lower is better"}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-muted/60 p-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coverage</div>
+          <div className="mt-2 font-semibold">{hasRows ? `${rows.length} jurisdictions` : "No data yet"}</div>
+        </div>
+      </div>
+
+      <Card className="space-y-6">
         <div className="flex flex-wrap gap-2">
           {compare.map((slug) => {
             const item = rows.find((row) => row.jurisdiction.slug === slug);
@@ -219,9 +246,15 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
             }
 
             return (
-              <span key={slug} className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
+              <span
+                key={slug}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+              >
                 {item.jurisdiction.name}
-                <button aria-label={`Remove ${item.jurisdiction.name}`} onClick={() => toggleCompare(slug)}>
+                <button
+                  aria-label={`Remove ${item.jurisdiction.name}`}
+                  onClick={() => toggleCompare(slug)}
+                >
                   <X className="h-4 w-4" />
                 </button>
               </span>
