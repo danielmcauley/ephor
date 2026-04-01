@@ -21,12 +21,11 @@ export function rankObservations(
   return sorted.map((observation, index) => {
     const previous = sorted[index - 1];
     const tied = previous ? previous.value === observation.value : false;
-    const rank = tied ? index + 1 - 1 : index + 1;
-    const bestPossibleIndex = betterDirection === "HIGHER" ? index : total - index - 1;
-    const percentile = total <= 1 ? 100 : (bestPossibleIndex / (total - 1)) * 100;
+    const rank = tied ? rankObservationsCompetitionRank(sorted, index) : index + 1;
+    const percentile = total <= 1 ? 100 : ((total - rank) / (total - 1)) * 100;
 
     return {
-      rank: tied ? rankObservationsCompetitionRank(sorted, index, betterDirection) : rank,
+      rank,
       tied,
       jurisdiction: observation.jurisdiction,
       value: observation.value,
@@ -41,11 +40,7 @@ export function rankObservations(
   });
 }
 
-function rankObservationsCompetitionRank(
-  sorted: MetricObservation[],
-  index: number,
-  betterDirection: BetterDirection
-) {
+function rankObservationsCompetitionRank(sorted: MetricObservation[], index: number) {
   const current = sorted[index];
 
   for (let pointer = index; pointer >= 0; pointer -= 1) {
@@ -61,5 +56,5 @@ function rankObservationsCompetitionRank(
     }
   }
 
-  return betterDirection === "HIGHER" ? index + 1 : index + 1;
+  return index + 1;
 }

@@ -7,8 +7,6 @@ import type { SourceAdapter, SourceObservation } from "@/lib/ingest/types";
 
 const SARPP_ZIP_URL = "https://apps.bea.gov/regional/zip/SARPP.zip";
 const SQGDP_ZIP_URL = "https://apps.bea.gov/regional/zip/SQGDP.zip";
-const SARPP_FILE = "SARPP_STATE_2008_2024.csv";
-const SQGDP_FILE = "SQGDP8__ALL_AREAS_2005_2025.csv";
 
 type BeaWideRow = Record<string, string>;
 
@@ -77,16 +75,72 @@ function parseBeaCsv(body: string) {
   }).filter((row: BeaWideRow) => row.GeoFIPS) as BeaWideRow[];
 }
 
+function latestBeaCsv(files: Map<string, string>, pattern: RegExp, label: string) {
+  const matches = [...files.entries()].filter(([name]) => {
+    const basename = name.split("/").pop() ?? name;
+    return pattern.test(basename);
+  });
+
+  if (matches.length === 0) {
+    throw new Error(`Expected a ${label} CSV in BEA ZIP.`);
+  }
+
+  matches.sort(([leftName], [rightName]) => compareBeaVintages(leftName, rightName));
+
+  return matches.at(-1)?.[1] ?? matches[0][1];
+}
+
+function compareBeaVintages(leftName: string, rightName: string) {
+  const leftYears = extractYearRange(leftName);
+  const rightYears = extractYearRange(rightName);
+
+  if (!leftYears && !rightYears) {
+    return leftName.localeCompare(rightName);
+  }
+
+  if (!leftYears) {
+    return -1;
+  }
+
+  if (!rightYears) {
+    return 1;
+  }
+
+  if (leftYears.end !== rightYears.end) {
+    return leftYears.end - rightYears.end;
+  }
+
+  if (leftYears.start !== rightYears.start) {
+    return leftYears.start - rightYears.start;
+  }
+
+  return leftName.localeCompare(rightName);
+}
+
+function extractYearRange(filename: string) {
+  const basename = filename.split("/").pop() ?? filename;
+  const match = basename.match(/_(\d{4})_(\d{4})\.csv$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    start: Number.parseInt(match[1], 10),
+    end: Number.parseInt(match[2], 10)
+  };
+}
+
 export const beaRealGdpAdapter: SourceAdapter = {
   metricId: "real_gdp_growth",
   async fetchObservations() {
     const { body, sourceUrl, lastModified } = await fetchBuffer(SQGDP_ZIP_URL);
     const files = unzipTextEntries(body);
-    const csv = files.get(SQGDP_FILE);
-
-    if (!csv) {
-      throw new Error(`Expected ${SQGDP_FILE} in BEA SQGDP ZIP.`);
-    }
+    const csv = latestBeaCsv(
+      files,
+      /^SQGDP8__ALL_AREAS_\d{4}_\d{4}\.csv$/i,
+      "SQGDP8 all-areas"
+    );
 
     const rows = parseBeaCsv(csv);
     const nationalRow = rows.find(
@@ -144,11 +198,7 @@ export const beaRppAdapter: SourceAdapter = {
   async fetchObservations() {
     const { body, sourceUrl, lastModified } = await fetchBuffer(SARPP_ZIP_URL);
     const files = unzipTextEntries(body);
-    const csv = files.get(SARPP_FILE);
-
-    if (!csv) {
-      throw new Error(`Expected ${SARPP_FILE} in BEA SARPP ZIP.`);
-    }
+    const csv = latestBeaCsv(files, /^SARPP_STATE_\d{4}_\d{4}\.csv$/i, "SARPP state");
 
     const rows = parseBeaCsv(csv);
     const observations: SourceObservation[] = [];

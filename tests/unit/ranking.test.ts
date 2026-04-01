@@ -43,6 +43,12 @@ describe("rankObservations", () => {
       ["Colorado", 3],
       ["Delaware", 4]
     ]);
+    expect(rows.map((row) => [row.jurisdiction.name, row.percentile])).toEqual([
+      ["Alabama", 100],
+      ["California", 100],
+      ["Colorado", (4 - 3) / 3 * 100],
+      ["Delaware", 0]
+    ]);
   });
 
   it("ranks lower-is-better metrics ascending", () => {
@@ -59,6 +65,11 @@ describe("rankObservations", () => {
       ["Alabama", 1],
       ["Colorado", 2],
       ["California", 3]
+    ]);
+    expect(rows.map((row) => [row.jurisdiction.name, row.percentile])).toEqual([
+      ["Alabama", 100],
+      ["Colorado", 50],
+      ["California", 0]
     ]);
   });
 });
