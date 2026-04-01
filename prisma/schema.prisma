@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MetricCadence {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum BetterDirection {
+  HIGHER
+  LOWER
+}
+
+enum RefreshStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model Jurisdiction {
+  id           String              @id @default(cuid())
+  slug         String              @unique
+  name         String
+  abbr         String              @unique
+  fips         String              @unique
+  isDc         Boolean             @default(false)
+  observations MetricObservation[]
+
+  @@map("jurisdictions")
+}
+
+model MetricDefinition {
+  id              String              @id
+  label           String
+  category        String
+  sourceName      String
+  sourceUrl       String
+  cadence         MetricCadence
+  betterDirection BetterDirection
+  unit            String
+  description     String
+  caveats         String?
+  methodology     String?
+  defaultMetric   Boolean             @default(false)
+  observations    MetricObservation[]
+  refreshRuns     RefreshRun[]
+
+  @@map("metric_definitions")
+}
+
+model MetricObservation {
+  id             String           @id @default(cuid())
+  jurisdictionId String
+  metricId       String
+  periodStart    DateTime
+  periodEnd      DateTime?
+  periodKey      String
+  periodLabel    String
+  value          Decimal          @db.Decimal(18, 6)
+  benchmarkValue Decimal?         @db.Decimal(18, 6)
+  benchmarkLabel String?
+  releaseDate    DateTime?
+  sourceUrl      String
+  ingestedAt     DateTime         @default(now())
+  metadata       Json?
+  jurisdiction   Jurisdiction     @relation(fields: [jurisdictionId], references: [id], onDelete: Cascade)
+  metric         MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  @@unique([jurisdictionId, metricId, periodKey], name: "metric_observation_identity")
+  @@index([metricId, periodStart(sort: Desc)])
+  @@map("metric_observations")
+}
+
+model RefreshRun {
+  id          String        @id @default(cuid())
+  metricId    String
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  status      RefreshStatus
+  message     String?
+  sourceUrl   String?
+  releaseDate DateTime?
+  rowCount    Int           @default(0)
+  metric      MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  @@index([metricId, startedAt(sort: Desc)])
+  @@map("refresh_runs")
+}

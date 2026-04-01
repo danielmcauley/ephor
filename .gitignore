@@ -1,0 +1,10 @@
+.next
+node_modules
+.env
+.env.local
+.vercel
+.turbo
+coverage
+playwright-report
+test-results
+dist
