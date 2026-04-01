@@ -4,7 +4,13 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { METRIC_BY_ID, METRIC_CATALOG } from "@/lib/metrics/catalog";
 import { rankObservations } from "@/lib/metrics/ranking";
-import type { MetricDefinition, MetricObservation, RefreshStatus, StateProfile } from "@/lib/types";
+import type {
+  MetricDefinition,
+  MetricObservation,
+  RefreshStatus,
+  StateProfile,
+  StateStackupSummary
+} from "@/lib/types";
 
 function toNumber(value: unknown) {
   if (value == null) {
@@ -285,6 +291,69 @@ export async function getStateProfile(slug: string): Promise<StateProfile> {
     },
     metrics
   };
+}
+
+export async function getStateStackupSummaries(): Promise<StateStackupSummary[]> {
+  const definitions = await prisma.metricDefinition.findMany({
+    orderBy: [
+      { category: "asc" },
+      { label: "asc" }
+    ]
+  });
+
+  const rankings = await Promise.all(
+    definitions.map(async (definition) => {
+      const ranking = await getLatestRanking(definition.id);
+
+      return {
+        metricId: definition.id,
+        metricLabel: definition.label,
+        rows: ranking.rows
+      };
+    })
+  );
+
+  const entriesByJurisdiction = new Map<
+    string,
+    {
+      jurisdiction: StateStackupSummary["jurisdiction"];
+      items: Array<{ metricId: string; metricLabel: string; rank: number }>;
+    }
+  >();
+
+  for (const ranking of rankings) {
+    for (const row of ranking.rows) {
+      const current = entriesByJurisdiction.get(row.jurisdiction.slug) ?? {
+        jurisdiction: row.jurisdiction,
+        items: []
+      };
+
+      current.items.push({
+        metricId: ranking.metricId,
+        metricLabel: ranking.metricLabel,
+        rank: row.rank
+      });
+
+      entriesByJurisdiction.set(row.jurisdiction.slug, current);
+    }
+  }
+
+  return [...entriesByJurisdiction.values()]
+    .map((entry) => {
+      const best = [...entry.items]
+        .sort((left, right) => left.rank - right.rank || left.metricLabel.localeCompare(right.metricLabel))
+        .slice(0, 3);
+      const worst = [...entry.items]
+        .sort((left, right) => right.rank - left.rank || left.metricLabel.localeCompare(right.metricLabel))
+        .slice(0, 3);
+
+      return {
+        jurisdiction: entry.jurisdiction,
+        best,
+        worst
+      };
+    })
+    .sort((left, right) => left.jurisdiction.name.localeCompare(right.jurisdiction.name));
 }
 
 function metricCadenceToPrisma(cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL") {

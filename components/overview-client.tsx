@@ -9,12 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { formatMetricValue } from "@/lib/metrics/format";
-import type { MetricDefinition, RankingRow, RefreshStatus } from "@/lib/types";
+import type {
+  MetricDefinition,
+  RankingRow,
+  RefreshStatus,
+  StateStackupSummary
+} from "@/lib/types";
 import { formatDateLabel } from "@/lib/utils";
 
 type OverviewClientProps = {
   metrics: MetricDefinition[];
   refreshStatus: RefreshStatus[];
+  stateSummaries: StateStackupSummary[];
   initialMetric: MetricDefinition;
   initialRows: RankingRow[];
 };
@@ -22,6 +28,7 @@ type OverviewClientProps = {
 export function OverviewClient({
   metrics,
   refreshStatus,
+  stateSummaries,
   initialMetric,
   initialRows
 }: OverviewClientProps) {
@@ -117,7 +124,7 @@ export function OverviewClient({
             <MetricPicker metrics={metrics} value={metric.id} onChange={handleMetricChange} />
           </div>
           <div className={isLoading ? "opacity-60 transition-opacity" : "transition-opacity"}>
-            <ChoroplethMap rows={rows} />
+            <ChoroplethMap rows={rows} stateSummaries={stateSummaries} />
           </div>
           <div className="flex flex-wrap items-center gap-3 rounded-3xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
             <span className="font-semibold text-foreground">Relative rank</span>

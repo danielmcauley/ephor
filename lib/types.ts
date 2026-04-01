@@ -62,6 +62,18 @@ export type StateProfile = {
   metrics: StateProfileMetric[];
 };
 
+export type StateStackupItem = {
+  metricId: string;
+  metricLabel: string;
+  rank: number;
+};
+
+export type StateStackupSummary = {
+  jurisdiction: MetricObservation["jurisdiction"];
+  best: StateStackupItem[];
+  worst: StateStackupItem[];
+};
+
 export type RefreshStatus = {
   metricId: string;
   status: "RUNNING" | "SUCCESS" | "FAILED" | "SKIPPED";
