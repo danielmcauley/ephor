@@ -2,7 +2,7 @@ import { MetricCadence, RefreshStatus as PrismaRefreshStatus } from "@prisma/cli
 import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/db";
-import { METRIC_BY_ID, METRIC_CATALOG } from "@/lib/metrics/catalog";
+import { DEFAULT_METRIC_ID, METRIC_BY_ID, METRIC_CATALOG } from "@/lib/metrics/catalog";
 import { rankObservations } from "@/lib/metrics/ranking";
 import type {
   MetricDefinition,
@@ -121,7 +121,7 @@ function mapMetricDefinition(record: {
     description: record.description,
     caveats: record.caveats ?? null,
     methodology: record.methodology ?? "",
-    defaultMetric: record.defaultMetric
+    defaultMetric: record.id === DEFAULT_METRIC_ID
   };
 }
 
@@ -151,6 +151,9 @@ export async function getMetadata() {
       }
     })
   ]);
+  const mappedMetrics = metrics
+    .map(mapMetricDefinition)
+    .sort((left, right) => Number(right.defaultMetric) - Number(left.defaultMetric));
 
   const statusesByMetric = new Map(refreshRuns.map((run) => [run.metricId, run]));
   const observationsByMetric = new Map(
@@ -158,7 +161,7 @@ export async function getMetadata() {
   );
 
   return {
-    metrics: metrics.map(mapMetricDefinition),
+    metrics: mappedMetrics,
     refreshStatus: METRIC_CATALOG.map((catalogMetric) => {
       const run = statusesByMetric.get(catalogMetric.id);
       const observationGroup = observationsByMetric.get(catalogMetric.id);

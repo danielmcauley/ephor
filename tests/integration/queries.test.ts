@@ -8,7 +8,8 @@ const { prismaMock } = vi.hoisted(() => ({
     },
     metricObservation: {
       findFirst: vi.fn(),
-      findMany: vi.fn()
+      findMany: vi.fn(),
+      groupBy: vi.fn()
     },
     refreshRun: {
       findMany: vi.fn()
@@ -23,7 +24,7 @@ vi.mock("@/lib/db", () => ({
   prisma: prismaMock
 }));
 
-import { getLatestRanking } from "@/lib/data/queries";
+import { getLatestRanking, getMetadata } from "@/lib/data/queries";
 
 describe("data queries", () => {
   beforeEach(() => {
@@ -116,5 +117,62 @@ describe("data queries", () => {
       ["Alabama", 2],
       ["California", 2]
     ]);
+  });
+
+  it("puts cost of living first in metadata and treats it as the default metric", async () => {
+    prismaMock.metricDefinition.findMany.mockResolvedValue([
+      {
+        id: "bachelors_attainment",
+        label: "Bachelor's attainment",
+        category: "People & Affordability",
+        sourceName: "Census",
+        sourceUrl: "https://example.gov",
+        cadence: "ANNUAL",
+        betterDirection: "HIGHER",
+        unit: "percent",
+        description: "desc",
+        caveats: null,
+        methodology: "method",
+        defaultMetric: false
+      },
+      {
+        id: "cost_of_living_index",
+        label: "Cost of living index",
+        category: "People & Affordability",
+        sourceName: "BEA",
+        sourceUrl: "https://example.gov",
+        cadence: "ANNUAL",
+        betterDirection: "LOWER",
+        unit: "index",
+        description: "desc",
+        caveats: null,
+        methodology: "method",
+        defaultMetric: false
+      },
+      {
+        id: "payroll_growth",
+        label: "Payroll job growth",
+        category: "Economy",
+        sourceName: "BLS",
+        sourceUrl: "https://example.gov",
+        cadence: "MONTHLY",
+        betterDirection: "HIGHER",
+        unit: "percent",
+        description: "desc",
+        caveats: null,
+        methodology: "method",
+        defaultMetric: true
+      }
+    ]);
+    prismaMock.refreshRun.findMany.mockResolvedValue([]);
+    prismaMock.metricObservation.groupBy.mockResolvedValue([]);
+
+    const metadata = await getMetadata();
+
+    expect(metadata.metrics[0]?.id).toBe("cost_of_living_index");
+    expect(metadata.metrics[0]?.defaultMetric).toBe(true);
+    expect(metadata.metrics.find((metric) => metric.id === "payroll_growth")?.defaultMetric).toBe(
+      false
+    );
   });
 });

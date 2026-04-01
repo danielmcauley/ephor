@@ -42,8 +42,7 @@ export const METRIC_CATALOG: MetricCatalogEntry[] = [
     unit: "percent",
     description: "12-month percent change in total nonfarm payroll employment.",
     caveats: "Computed from raw employment levels and benchmarked monthly estimates.",
-    methodology: "Percent change of statewide total nonfarm all employees versus the same month one year earlier.",
-    defaultMetric: true
+    methodology: "Percent change of statewide total nonfarm all employees versus the same month one year earlier."
   },
   {
     id: "real_gdp_growth",
@@ -121,7 +120,8 @@ export const METRIC_CATALOG: MetricCatalogEntry[] = [
     unit: "index",
     description: "Regional Price Parity index where the U.S. average equals 100.",
     caveats: "Published annually and revised historically.",
-    methodology: "BEA SARPP regional price parity index, U.S. average = 100."
+    methodology: "BEA SARPP regional price parity index, U.S. average = 100.",
+    defaultMetric: true
   },
   {
     id: "gasoline_cost",
@@ -178,7 +178,7 @@ export const METRIC_CATALOG: MetricCatalogEntry[] = [
 ];
 
 export const DEFAULT_METRIC_ID =
-  METRIC_CATALOG.find((metric) => metric.defaultMetric)?.id ?? "payroll_growth";
+  METRIC_CATALOG.find((metric) => metric.defaultMetric)?.id ?? "cost_of_living_index";
 
 export const METRIC_BY_ID = new Map(
   METRIC_CATALOG.map((metric) => [metric.id, metric])
