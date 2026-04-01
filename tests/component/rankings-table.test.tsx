@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { RankingsTable } from "@/components/rankings-table";
 import type { MetricDefinition, RankingRow } from "@/lib/types";
@@ -50,6 +50,10 @@ const rows: RankingRow[] = [
 ];
 
 describe("RankingsTable", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("filters by search and lets users pin a state for comparison", () => {
     render(<RankingsTable metrics={metrics} initialMetric={metrics[0]} initialRows={rows} />);
 
@@ -76,5 +80,11 @@ describe("RankingsTable", () => {
 
     expect(screen.getAllByText("Compare every state on one metric at a time.")[0]).toBeInTheDocument();
     expect(screen.getByText("No state rows are available for this metric yet.")).toBeInTheDocument();
+  });
+
+  it("shows sticky filter helper copy for the active metric bar", () => {
+    render(<RankingsTable metrics={metrics} initialMetric={metrics[0]} initialRows={rows} />);
+
+    expect(screen.getByText("Filters stay pinned while you scan the ranking table.")).toBeInTheDocument();
   });
 });

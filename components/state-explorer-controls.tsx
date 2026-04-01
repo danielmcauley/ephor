@@ -37,7 +37,7 @@ export function StateExplorerControls({
   return (
     <Card className="space-y-4">
       <div className="space-y-3">
-        <Badge>States</Badge>
+        <Badge>State Explorer</Badge>
         <CardTitle className="text-3xl">Pick a state and see where it stacks up.</CardTitle>
         <CardDescription className="max-w-3xl text-base">
           Use the explorer to jump to any state, scan its strongest and weakest rankings, and then dig into the latest metric cards and trends below.

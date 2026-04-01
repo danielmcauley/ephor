@@ -134,6 +134,9 @@ export function OverviewClient({
                 {item.label}
               </span>
             ))}
+            <span className="basis-full text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:ml-auto sm:basis-auto">
+              Hover for stackups. Click to open State Explorer.
+            </span>
           </div>
           {!hasRows ? (
             <div className="rounded-3xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
