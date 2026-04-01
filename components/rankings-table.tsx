@@ -37,6 +37,13 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
     [rows, search]
   );
   const hasRows = rows.length > 0;
+  const compareRows = useMemo(
+    () =>
+      compare
+        .map((slug) => rows.find((row) => row.jurisdiction.slug === slug))
+        .filter((row): row is RankingRow => Boolean(row)),
+    [compare, rows]
+  );
 
   const columns = useMemo<ColumnDef<RankingRow>[]>(
     () => [
@@ -51,6 +58,7 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
           <div className="flex items-center gap-3">
             <button
               aria-label={`Pin ${row.original.jurisdiction.name}`}
+              aria-pressed={compare.includes(row.original.jurisdiction.slug)}
               className="rounded-full border border-border p-2 text-muted-foreground transition-colors hover:border-primary hover:text-primary"
               onClick={() => toggleCompare(row.original.jurisdiction.slug)}
             >
@@ -72,7 +80,7 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
         header: "Period"
       }
     ],
-    [metric]
+    [compare, metric]
   );
 
   const table = useReactTable({
@@ -219,6 +227,52 @@ export function RankingsTable({ metrics, initialMetric, initialRows }: RankingsT
               </span>
             );
           })}
+        </div>
+        <div className="space-y-3 rounded-3xl border border-border/70 bg-white p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Pinned comparison</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Pin up to four states to compare their current standing on {metric.label.toLowerCase()}.
+              </div>
+            </div>
+            <Badge>{compareRows.length}/4 pinned</Badge>
+          </div>
+          {compareRows.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {compareRows.map((row) => (
+                <div key={row.jurisdiction.slug} className="rounded-2xl bg-muted/50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{row.jurisdiction.name}</div>
+                      <div className="text-sm text-muted-foreground">{row.periodLabel}</div>
+                    </div>
+                    <button
+                      aria-label={`Remove ${row.jurisdiction.name}`}
+                      className="rounded-full border border-border bg-white p-2 text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                      onClick={() => toggleCompare(row.jurisdiction.slug)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rank</div>
+                      <div className="mt-1 text-2xl font-bold">{row.rank}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Value</div>
+                      <div className="mt-1 text-lg font-semibold">{formatMetricValue(metric, row.value)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
+              No states pinned yet. Use the pin button in the table to build a side-by-side comparison.
+            </div>
+          )}
         </div>
       </Card>
 

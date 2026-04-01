@@ -9,17 +9,19 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { formatMetricValue } from "@/lib/metrics/format";
-import type { MetricDefinition, RankingRow } from "@/lib/types";
+import type { MetricDefinition, RankingRow, RefreshStatus } from "@/lib/types";
 import { formatDateLabel } from "@/lib/utils";
 
 type OverviewClientProps = {
   metrics: MetricDefinition[];
+  refreshStatus: RefreshStatus[];
   initialMetric: MetricDefinition;
   initialRows: RankingRow[];
 };
 
 export function OverviewClient({
   metrics,
+  refreshStatus,
   initialMetric,
   initialRows
 }: OverviewClientProps) {
@@ -32,6 +34,29 @@ export function OverviewClient({
   const bottomFive = useMemo(() => rows.slice(-5).reverse(), [rows]);
   const bestRow = topFive[0] ?? null;
   const worstRow = bottomFive[0] ?? null;
+  const liveMetricCount = useMemo(
+    () => refreshStatus.filter((status) => status.status === "SUCCESS" && !status.stale).length,
+    [refreshStatus]
+  );
+  const staleMetricCount = useMemo(
+    () => refreshStatus.filter((status) => status.stale).length,
+    [refreshStatus]
+  );
+  const latestRefreshLabel = useMemo(() => {
+    const completedTimes = refreshStatus
+      .map((status) => status.completedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime());
+
+    return formatDateLabel(completedTimes[0]);
+  }, [refreshStatus]);
+  const mapLegend = [
+    { label: "Top quintile", color: "#0f8b8d" },
+    { label: "Upper middle", color: "#4fb4b5" },
+    { label: "Middle", color: "#a9d6d5" },
+    { label: "Lower middle", color: "#f6d99a" },
+    { label: "Bottom quintile", color: "#efb366" }
+  ];
 
   async function handleMetricChange(metricId: string) {
     setIsLoading(true);
@@ -73,15 +98,35 @@ export function OverviewClient({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-3">
               <Badge>Overview</Badge>
-              <CardTitle className="text-3xl">Track the latest leaders and laggards by official state metric.</CardTitle>
+              <CardTitle className="text-3xl">Track the latest leaders and worst performers by official state metric.</CardTitle>
               <CardDescription className="max-w-2xl text-base">
                 Every leaderboard uses one clearly named metric, one federal source, and one release period. No composite score.
               </CardDescription>
+              <div className="flex flex-wrap gap-3">
+                <div className="rounded-full border border-border/70 bg-white px-4 py-2 text-sm font-medium">
+                  {liveMetricCount} live metrics
+                </div>
+                <div className="rounded-full border border-border/70 bg-white px-4 py-2 text-sm font-medium">
+                  {staleMetricCount} stale right now
+                </div>
+                <div className="rounded-full border border-border/70 bg-white px-4 py-2 text-sm font-medium">
+                  Last refresh {latestRefreshLabel}
+                </div>
+              </div>
             </div>
             <MetricPicker metrics={metrics} value={metric.id} onChange={handleMetricChange} />
           </div>
           <div className={isLoading ? "opacity-60 transition-opacity" : "transition-opacity"}>
             <ChoroplethMap rows={rows} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3 rounded-3xl bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">Relative rank</span>
+            {mapLegend.map((item) => (
+              <span key={item.label} className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border border-border/50" style={{ backgroundColor: item.color }} />
+                {item.label}
+              </span>
+            ))}
           </div>
           {!hasRows ? (
             <div className="rounded-3xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">

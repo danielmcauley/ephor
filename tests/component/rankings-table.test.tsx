@@ -65,7 +65,10 @@ describe("RankingsTable", () => {
     });
     fireEvent.click(screen.getByLabelText("Pin Alabama"));
 
-    expect(screen.getByLabelText("Remove Alabama")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Remove Alabama")).toHaveLength(2);
+    expect(screen.getByText("1/4 pinned")).toBeInTheDocument();
+    expect(screen.queryByText(/No states pinned yet\./)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Alabama").length).toBeGreaterThan(1);
   });
 
   it("keeps the rankings shell visible when a metric has no rows yet", () => {
