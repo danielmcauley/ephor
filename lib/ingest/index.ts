@@ -11,6 +11,7 @@ import { censusTaxesAdapter } from "@/lib/ingest/adapters/census-taxes";
 import { eiaGasolineAdapter } from "@/lib/ingest/adapters/eia-gasoline";
 import { hudPitAdapter } from "@/lib/ingest/adapters/hud-pit";
 import type { SourceAdapter, SourceObservation } from "@/lib/ingest/types";
+import { summarizeSourceObservations } from "@/lib/published-snapshots";
 
 const ADAPTERS: SourceAdapter[] = [
   blsLausAdapter,
@@ -58,10 +59,19 @@ export async function runIngest() {
     try {
       const observations = await adapter.fetchObservations();
       await upsertObservations(observations, jurisdictionIds);
+      const snapshotSummary = summarizeSourceObservations(observations, jurisdictionIds.size).get(
+        adapter.metricId
+      );
       const latestReleaseDate = observations
         .map((observation) => observation.releaseDate ?? null)
         .filter(Boolean)
         .sort((left, right) => right!.getTime() - left!.getTime())[0];
+      const message =
+        snapshotSummary?.latest &&
+        snapshotSummary.published &&
+        snapshotSummary.latest.periodKey !== snapshotSummary.published.periodKey
+          ? `Imported ${observations.length} observations. Latest period ${snapshotSummary.latest.periodLabel} is incomplete (${snapshotSummary.latest.rowCount}/${jurisdictionIds.size}), so the dashboard keeps serving ${snapshotSummary.published.periodLabel}.`
+          : `Imported ${observations.length} observations.`;
 
       await prisma.refreshRun.update({
         where: { id: refreshRun.id },
@@ -71,7 +81,7 @@ export async function runIngest() {
           completedAt: new Date(),
           releaseDate: latestReleaseDate ?? null,
           sourceUrl: observations[0]?.sourceUrl ?? null,
-          message: `Imported ${observations.length} observations.`
+          message
         }
       });
 

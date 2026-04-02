@@ -1,9 +1,11 @@
 import { MetricCadence, RefreshStatus as PrismaRefreshStatus } from "@prisma/client";
 import { notFound } from "next/navigation";
 
+import { JURISDICTIONS } from "@/lib/data/jurisdictions";
 import { prisma } from "@/lib/db";
 import { DEFAULT_METRIC_ID, METRIC_BY_ID, METRIC_CATALOG } from "@/lib/metrics/catalog";
 import { rankObservations } from "@/lib/metrics/ranking";
+import { selectLatestCompleteSnapshot, type SnapshotCandidate } from "@/lib/published-snapshots";
 import type {
   MetricDefinition,
   MetricObservation,
@@ -11,6 +13,27 @@ import type {
   StateProfile,
   StateStackupSummary
 } from "@/lib/types";
+
+const PUBLISHED_ROW_COUNT = JURISDICTIONS.length;
+
+type ObservationSnapshotRecord = {
+  metricId: string;
+  periodKey: string;
+  periodLabel: string;
+  periodStart: Date;
+  periodEnd: Date | null;
+  _count: {
+    _all: number;
+  };
+  _max: {
+    releaseDate: Date | null;
+    ingestedAt: Date | null;
+  };
+};
+
+type ObservationSnapshot = SnapshotCandidate & {
+  ingestedAt?: Date | null;
+};
 
 function toNumber(value: unknown) {
   if (value == null) {
@@ -125,8 +148,82 @@ function mapMetricDefinition(record: {
   };
 }
 
+function mapObservationSnapshot(record: ObservationSnapshotRecord): ObservationSnapshot {
+  return {
+    metricId: record.metricId,
+    periodKey: record.periodKey,
+    periodLabel: record.periodLabel,
+    periodStart: record.periodStart,
+    periodEnd: record.periodEnd,
+    rowCount: record._count._all,
+    releaseDate: record._max.releaseDate ?? null,
+    ingestedAt: record._max.ingestedAt ?? null
+  };
+}
+
+function completeSnapshots(snapshots: ObservationSnapshot[]) {
+  return snapshots.filter((snapshot) => snapshot.rowCount >= PUBLISHED_ROW_COUNT);
+}
+
+async function listObservationSnapshots(metricIds?: string[]) {
+  const groups = await prisma.metricObservation.groupBy({
+    by: ["metricId", "periodKey", "periodLabel", "periodStart", "periodEnd"],
+    where: metricIds ? { metricId: { in: metricIds } } : undefined,
+    _count: {
+      _all: true
+    },
+    _max: {
+      releaseDate: true,
+      ingestedAt: true
+    }
+  });
+
+  const snapshotsByMetric = new Map<string, ObservationSnapshot[]>();
+
+  for (const group of groups as ObservationSnapshotRecord[]) {
+    const snapshot = mapObservationSnapshot(group);
+    const current = snapshotsByMetric.get(snapshot.metricId) ?? [];
+    current.push(snapshot);
+    current.sort((left, right) => right.periodStart.getTime() - left.periodStart.getTime());
+    snapshotsByMetric.set(snapshot.metricId, current);
+  }
+
+  return snapshotsByMetric;
+}
+
+async function getPublishedSnapshot(metricId: string) {
+  const snapshotsByMetric = await listObservationSnapshots([metricId]);
+  const snapshots = snapshotsByMetric.get(metricId) ?? [];
+
+  return selectLatestCompleteSnapshot(snapshots, PUBLISHED_ROW_COUNT);
+}
+
+async function getRankedRowsForPeriod(metricId: string, periodKey: string, betterDirection: string) {
+  const observations = await prisma.metricObservation.findMany({
+    where: {
+      metricId,
+      periodKey
+    },
+    include: {
+      jurisdiction: {
+        select: {
+          slug: true,
+          name: true,
+          abbr: true,
+          fips: true
+        }
+      }
+    }
+  });
+
+  return rankObservations(
+    observations.map(mapObservation),
+    betterDirection as MetricDefinition["betterDirection"]
+  );
+}
+
 export async function getMetadata() {
-  const [metrics, refreshRuns, observationGroups] = await Promise.all([
+  const [metrics, refreshRuns, observationSnapshots] = await Promise.all([
     prisma.metricDefinition.findMany({
       orderBy: [
         { category: "asc" },
@@ -140,55 +237,43 @@ export async function getMetadata() {
         { startedAt: "desc" }
       ]
     }),
-    prisma.metricObservation.groupBy({
-      by: ["metricId"],
-      _count: {
-        _all: true
-      },
-      _max: {
-        releaseDate: true,
-        ingestedAt: true
-      }
-    })
+    listObservationSnapshots()
   ]);
   const mappedMetrics = metrics
     .map(mapMetricDefinition)
     .sort((left, right) => Number(right.defaultMetric) - Number(left.defaultMetric));
 
   const statusesByMetric = new Map(refreshRuns.map((run) => [run.metricId, run]));
-  const observationsByMetric = new Map(
-    observationGroups.map((group) => [group.metricId, group])
-  );
 
   return {
     metrics: mappedMetrics,
     refreshStatus: METRIC_CATALOG.map((catalogMetric) => {
       const run = statusesByMetric.get(catalogMetric.id);
-      const observationGroup = observationsByMetric.get(catalogMetric.id);
-      const lastCompletedAt = run?.completedAt ?? observationGroup?._max.ingestedAt ?? null;
-      const releaseDate = run?.releaseDate ?? observationGroup?._max.releaseDate ?? null;
+      const snapshots = observationSnapshots.get(catalogMetric.id) ?? [];
+      const publishedSnapshot = selectLatestCompleteSnapshot(snapshots, PUBLISHED_ROW_COUNT);
+      const lastCompletedAt = publishedSnapshot?.ingestedAt ?? null;
+      const releaseDate = publishedSnapshot?.releaseDate ?? null;
       const stale =
-        (!run && !observationGroup) ||
-        (run && run.status !== PrismaRefreshStatus.SUCCESS) ||
+        publishedSnapshot == null ||
         (lastCompletedAt != null &&
           Date.now() - lastCompletedAt.getTime() >
             staleThreshold(metricCadenceToPrisma(catalogMetric.cadence)));
 
       return {
         metricId: catalogMetric.id,
-        status: run?.status ?? (observationGroup ? "SUCCESS" : "FAILED"),
+        status: publishedSnapshot ? PrismaRefreshStatus.SUCCESS : run?.status ?? PrismaRefreshStatus.FAILED,
         startedAt:
+          publishedSnapshot?.ingestedAt?.toISOString() ??
           run?.startedAt.toISOString() ??
-          observationGroup?._max.ingestedAt?.toISOString() ??
           new Date(0).toISOString(),
         completedAt: lastCompletedAt?.toISOString() ?? null,
         releaseDate: releaseDate?.toISOString() ?? null,
-        rowCount: run?.rowCount ?? observationGroup?._count._all ?? 0,
+        rowCount: publishedSnapshot?.rowCount ?? 0,
         message:
           run?.message ??
-          (observationGroup
-            ? `Using latest ingested observations (${observationGroup._count._all} rows).`
-            : "No refresh has run yet."),
+          (publishedSnapshot
+            ? `Serving published snapshot ${publishedSnapshot.periodLabel} (${publishedSnapshot.rowCount}/${PUBLISHED_ROW_COUNT} rows).`
+            : "No published snapshot yet."),
         stale
       } satisfies RefreshStatus;
     })
@@ -204,10 +289,7 @@ export async function getLatestRanking(metricId: string) {
     notFound();
   }
 
-  const latest = await prisma.metricObservation.findFirst({
-    where: { metricId },
-    orderBy: { periodStart: "desc" }
-  });
+  const latest = await getPublishedSnapshot(metricId);
 
   if (!latest) {
     return {
@@ -217,24 +299,7 @@ export async function getLatestRanking(metricId: string) {
     };
   }
 
-  const observations = await prisma.metricObservation.findMany({
-    where: {
-      metricId,
-      periodKey: latest.periodKey
-    },
-    include: {
-      jurisdiction: {
-        select: {
-          slug: true,
-          name: true,
-          abbr: true,
-          fips: true
-        }
-      }
-    }
-  });
-
-  const ranked = rankObservations(observations.map(mapObservation), metric.betterDirection);
+  const ranked = await getRankedRowsForPeriod(metricId, latest.periodKey, metric.betterDirection);
 
   return {
     metric: mapMetricDefinition(metric),
@@ -258,19 +323,35 @@ export async function getStateProfile(slug: string): Promise<StateProfile> {
       { label: "asc" }
     ]
   });
+  const snapshotsByMetric = await listObservationSnapshots(definitions.map((definition) => definition.id));
 
   const metrics = await Promise.all(
     definitions.map(async (definition) => {
-      const ranking = await getLatestRanking(definition.id);
-      const latest = ranking.rows.find((row) => row.jurisdiction.slug === slug) ?? null;
-      const trend = await prisma.metricObservation.findMany({
-        where: {
-          metricId: definition.id,
-          jurisdictionId: jurisdiction.id
-        },
-        orderBy: { periodStart: "desc" },
-        take: cadenceWindow(definition.id)
-      });
+      const snapshots = snapshotsByMetric.get(definition.id) ?? [];
+      const latestSnapshot = selectLatestCompleteSnapshot(snapshots, PUBLISHED_ROW_COUNT);
+      const rankingRows = latestSnapshot
+        ? await getRankedRowsForPeriod(
+            definition.id,
+            latestSnapshot.periodKey,
+            definition.betterDirection
+          )
+        : [];
+      const trendPeriods = completeSnapshots(snapshots)
+        .slice(0, cadenceWindow(definition.id))
+        .map((snapshot) => snapshot.periodKey);
+      const latest = rankingRows.find((row) => row.jurisdiction.slug === slug) ?? null;
+      const trend = trendPeriods.length
+        ? await prisma.metricObservation.findMany({
+            where: {
+              metricId: definition.id,
+              jurisdictionId: jurisdiction.id,
+              periodKey: {
+                in: trendPeriods
+              }
+            },
+            orderBy: { periodStart: "desc" }
+          })
+        : [];
 
       return {
         definition: mapMetricDefinition(definition),
