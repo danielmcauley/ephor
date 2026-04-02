@@ -46,10 +46,32 @@ describe("data queries", () => {
       methodology: "method",
       defaultMetric: false
     });
-    prismaMock.metricObservation.findFirst.mockResolvedValue({
-      periodKey: "2026-01",
-      periodLabel: "Jan 2026"
-    });
+    prismaMock.metricObservation.groupBy.mockResolvedValue([
+      {
+        metricId: "unemployment_rate",
+        periodKey: "2026-02",
+        periodLabel: "Feb 2026",
+        periodStart: new Date(Date.UTC(2026, 1, 1)),
+        periodEnd: new Date(Date.UTC(2026, 1, 28)),
+        _count: { _all: 50 },
+        _max: {
+          releaseDate: new Date(Date.UTC(2026, 2, 1)),
+          ingestedAt: new Date(Date.UTC(2026, 2, 1))
+        }
+      },
+      {
+        metricId: "unemployment_rate",
+        periodKey: "2026-01",
+        periodLabel: "Jan 2026",
+        periodStart: new Date(Date.UTC(2026, 0, 1)),
+        periodEnd: new Date(Date.UTC(2026, 0, 31)),
+        _count: { _all: 51 },
+        _max: {
+          releaseDate: new Date(Date.UTC(2026, 1, 1)),
+          ingestedAt: new Date(Date.UTC(2026, 1, 1))
+        }
+      }
+    ]);
     prismaMock.metricObservation.findMany.mockResolvedValue([
       {
         metricId: "unemployment_rate",
@@ -112,6 +134,14 @@ describe("data queries", () => {
 
     const ranking = await getLatestRanking("unemployment_rate");
 
+    expect(prismaMock.metricObservation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          metricId: "unemployment_rate",
+          periodKey: "2026-01"
+        })
+      })
+    );
     expect(ranking.rows.map((row) => [row.jurisdiction.name, row.rank])).toEqual([
       ["Colorado", 1],
       ["Alabama", 2],
